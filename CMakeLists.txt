@@ -1,251 +1,85 @@
+cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+
+# CMAKE
+# apt install build-essential git
+# git clone https://github.com/Kitware/CMake/; cd CMake
+# ./bootstrap && make && sudo make install
+
+# VCPKG
+# cmake -DCMAKE_TOOLCHAIN_FILE=/opt/workspace/vcpkg/scripts/buildsystems/vcpkg.cmake ..
+# ./vcpkg install boost-asio boost-lockfree boost-variant boost-filesystem boost-iostreams boost-system libmariadb pugixml spdlog
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+  set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      CACHE STRING "")
+endif()
+
+if(DEFINED ENV{VCPKG_DEFAULT_TRIPLET} AND NOT DEFINED VCPKG_TARGET_TRIPLET)
+  set(VCPKG_TARGET_TRIPLET "$ENV{VCPKG_DEFAULT_TRIPLET}" CACHE STRING "")
+endif()
+
+set(VCPKG_FEATURE_FLAGS "versions")
+set(VCPKG_BUILD_TYPE "release")
+
+# *****************************************************************************
+# Project otbr
+# *****************************************************************************
 project(otbr)
 
+
 # *****************************************************************************
-# Cmake Features
+# Append cmake search path
 # *****************************************************************************
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-# Global gives error when building spdlog
-# Avoid changes by cmake/make on the source tree
-# https://gitlab.kitware.com/cmake/cmake/issues/18403
-set(CMAKE_DISABLE_SOURCE_CHANGES ON)
-set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
-# Make will print more details
-set(CMAKE_VERBOSE_MAKEFILE OFF)
-
-# Generate compile_commands.json
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# *****************************************************************************
+# Include cmake tools
+# *****************************************************************************
+include(MessageColors)
+include(LoggingHelper)
 
 
 # *****************************************************************************
 # Options
 # *****************************************************************************
-option(OPTIONS_ENABLE_OPENMP "Enable Open Multi-Processing support." ON)
-option(DEBUG_LOG "Enable Debug Log" OFF)
-
-
-# *****************************************************************************
-# Client
-# *****************************************************************************
-add_executable(${PROJECT_NAME} "")
+option(OPTIONS_ENABLE_CCACHE "Enable ccache" ON)
+option(OPTIONS_ENABLE_IPO "Check and Enable interprocedural optimization (IPO/LTO)" ON)
 
 
 # *****************************************************************************
 # Options Code
 # *****************************************************************************
 
-# === OpenMP ===
-if(OPTIONS_ENABLE_OPENMP)
-  log_option_enabled("openmp")
-  find_package(OpenMP)
-  if(OpenMP_CXX_FOUND)
-      target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
-  endif()
-else()
-  log_option_disabled("openmp")
+# === CCACHE ===
+if(OPTIONS_ENABLE_CCACHE)
+    find_program(CCACHE ccache)
+    if(CCACHE)
+        log_option_enabled("ccache")
+        set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE})
+        else()
+        log_option_disabled("ccache")
+    endif()
 endif()
+
 
 # === IPO ===
-check_ipo_supported(RESULT result OUTPUT output)
-if(result)
-  set_property(TARGET ${PROJECT_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+option(OPTIONS_ENABLE_IPO "Check and Enable interprocedural optimization (IPO/LTO)" ON)
+if(OPTIONS_ENABLE_IPO)
+  log_option_enabled("ipo")
+
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT result OUTPUT output)
+  if(result)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+  else()
+    log_war("IPO is not supported: ${output}")
+  endif()
 else()
-  message(WARNING "IPO is not supported: ${output}")
+  log_option_disabled("ipo")
 endif()
 
-# cmake -DDEBUG_LOG=ON ..
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  target_compile_definitions(${PROJECT_NAME} PRIVATE -DDEBUG_LOG=ON )
-  log_option_enabled("DEBUG LOG")
-  else()
-  log_option_disabled("DEBUG LOG")
-endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
 
 # *****************************************************************************
-# Packages / Libs
+# Add project
 # *****************************************************************************
-if (MSVC)
-	find_package(Boost 1.53.0 COMPONENTS system filesystem iostreams date_time REQUIRED)
-	find_package(cryptopp CONFIG REQUIRED)
-	set(CRYPTOPP_LIBRARIES "cryptopp-static")
-	find_package(CURL REQUIRED)
-	find_package(jsoncpp REQUIRED)
-	find_package(LuaJIT REQUIRED)
-	find_package(MySQL REQUIRED)
-	find_package(PugiXML REQUIRED)
-	find_package(spdlog CONFIG REQUIRED)
-	find_package(Threads REQUIRED)
-else()
-	find_package(Boost REQUIRED COMPONENTS system filesystem iostreams date_time)
-	find_package(cryptopp CONFIG REQUIRED)
-	find_package(CURL CONFIG REQUIRED)
-	find_package(jsoncpp CONFIG REQUIRED)
-	find_package(LuaJIT REQUIRED)
-	find_package(pugixml CONFIG REQUIRED)
-	find_package(spdlog CONFIG REQUIRED)
-	find_package(Threads REQUIRED)
-	find_package(unofficial-libmariadb CONFIG REQUIRED)
-endif (MSVC)
-
-include(GNUInstallDirs)
-
-
-# *****************************************************************************
-# otserver configuration
-# *****************************************************************************
-target_sources(${PROJECT_NAME}
-	PRIVATE
-		account.cpp
-		actions.cpp
-		ban.cpp
-		baseevents.cpp
-		bed.cpp
-		chat.cpp
-		combat.cpp
-		condition.cpp
-		configmanager.cpp
-		connection.cpp
-		container.cpp
-		creature.cpp
-		creatureevent.cpp
-		cylinder.cpp
-		database.cpp
-		databasemanager.cpp
-		databasetasks.cpp
-		depotchest.cpp
-		depotlocker.cpp
-		events.cpp
-		familiars.cpp
-		fileloader.cpp
-		game.cpp
-		gamestore.cpp
-		globalevent.cpp
-		groups.cpp
-		guild.cpp
-		house.cpp
-		housetile.cpp
-		imbuements.cpp
-		inbox.cpp
-		iobestiary.cpp
-		ioguild.cpp
-		iologindata.cpp
-		iomap.cpp
-		iomapserialize.cpp
-		iomarket.cpp
-		item.cpp
-		items.cpp
-		luascript.cpp
-		mailbox.cpp
-		map.cpp
-		modules.cpp
-		monster.cpp
-		monsters.cpp
-		mounts.cpp
-		movement.cpp
-		networkmessage.cpp
-		npc.cpp
-		otpch.cpp
-		otserv.cpp
-		outfit.cpp
-		outputmessage.cpp
-		party.cpp
-		player.cpp
-		position.cpp
-		protocol.cpp
-		protocolgame.cpp
-		protocollogin.cpp
-		protocolstatus.cpp
-		raids.cpp
-		rewardchest.cpp
-		reward.cpp
-		rsa.cpp
-		scheduler.cpp
-		scripts.cpp
-		server.cpp
-		signals.cpp
-		spawn.cpp
-		spells.cpp
-		talkaction.cpp
-		tasks.cpp
-		teleport.cpp
-		thing.cpp
-		tile.cpp
-		tools.cpp
-		trashholder.cpp
-		vocation.cpp
-		waitlist.cpp
-		weapons.cpp
-		webhook.cpp
-		wildcardtree.cpp
-		xtea.cpp
-)
-
-if (MSVC)
-
-target_include_directories(${PROJECT_NAME}
-	PRIVATE
-		${MYSQL_INCLUDE_DIR}
-		${LUA_INCLUDE_DIR}
-		${Boost_INCLUDE_DIRS}
-		${PUGIXML_INCLUDE_DIR}
-		${CRYPTOPP_INCLUDE_DIR}
-		${CURL_INCLUDE_DIRS}
-		$<TARGET_PROPERTY:jsoncpp_lib,INTERFACE_INCLUDE_DIRECTORIES>)
-
-target_link_libraries(${PROJECT_NAME}
-	PRIVATE
-		${MYSQL_CLIENT_LIBS}
-		${LUA_LIBRARIES}
-		${Boost_LIBRARY_DIRS}
-		${Boost_LIBRARIES}
-		${PUGIXML_LIBRARIES}
-		${CRYPTOPP_LIBRARIES}
-		${CMAKE_THREAD_LIBS_INIT}
-		${CURL_LIBRARIES}
-		jsoncpp_lib
-		spdlog::spdlog
-)
-
-else()
-
-	target_include_directories(${PROJECT_NAME}
-		PRIVATE
-			$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-			$<INSTALL_INTERFACE:include>
-			${LUA_INCLUDE_DIR}
-	)
-
-	target_link_libraries(${PROJECT_NAME}
-		PRIVATE
-			Boost::boost
-			Boost::date_time
-			Boost::filesystem
-			Boost::iostreams
-			Boost::system
-			cryptopp-static
-			CURL::libcurl
-			jsoncpp_static
-			libmariadb mariadbclient
-			pugixml::pugixml
-			spdlog::spdlog
-			Threads::Threads
-			${LUA_LIBRARIES}
-	)
-
-endif (MSVC)
-
-# print all variables
-# get_cmake_property(_variableNames VARIABLES)
-# list (SORT _variableNames)
-# foreach (_variableName ${_variableNames})
-#     message(STATUS "${_variableName}=${${_variableName}}")
-# endforeach()
-
-set_target_properties(${PROJECT_NAME}
-		PROPERTIES
-			RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
+add_subdirectory(src)
